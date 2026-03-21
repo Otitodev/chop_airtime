@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Chop Airtime — Free Nigerian Airtime</title>
+
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
+
+  <!-- Tailwind -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: { sans: ["Plus Jakarta Sans", "sans-serif"] },
+          colors: {
+            brand: {
+              50:  "#f0faf4",
+              100: "#d9f2e3",
+              200: "#b3e5c8",
+              500: "#2db865",
+              600: "#008751",
+              700: "#006b40",
+              800: "#005233",
+            },
+            gold: { 400: "#FBBF24", 500: "#F59E0B" },
+          },
+        },
+      },
+    };
+  </script>
+
+  <style>
+    /* ── Base ── */
+    *, *::before, *::after { box-sizing: border-box; }
+
+    html, body {
+      margin: 0; padding: 0;
+      height: 100%;
+      font-family: "Plus Jakarta Sans", sans-serif;
+      /* Prevent iOS bounce scroll behind the chat window */
+      overscroll-behavior: none;
+      background-color: #f8faf8;
+      background-image: radial-gradient(circle, #c8e6d0 1px, transparent 1px);
+      background-size: 24px 24px;
+    }
+
+    /* ── Mobile: fixed full-screen so the keyboard overlays instead of resizing ── */
+    #chat-window {
+      position: fixed;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      background: #fff;
+    }
+
+    /* ── Messages scroll area ── */
+    #messages {
+      flex: 1;
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch; /* smooth momentum scroll on iOS */
+      overscroll-behavior: contain;
+      scroll-behavior: smooth;
+    }
+    #messages::-webkit-scrollbar { width: 4px; }
+    #messages::-webkit-scrollbar-track { background: transparent; }
+    #messages::-webkit-scrollbar-thumb { background: #c8e6d0; border-radius: 4px; }
+
+    /* ── Bubble animation ── */
+    .bubble-in {
+      animation: bubbleIn 0.22s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+    }
+    @keyframes bubbleIn {
+      from { opacity: 0; transform: translateY(10px) scale(0.97); }
+      to   { opacity: 1; transform: translateY(0)   scale(1); }
+    }
+
+    /* ── Typing dots ── */
+    .dot {
+      width: 7px; height: 7px;
+      background: #9ca3af;
+      border-radius: 50%;
+      animation: dotBounce 1.2s infinite ease-in-out;
+    }
+    .dot:nth-child(2) { animation-delay: 0.2s; }
+    .dot:nth-child(3) { animation-delay: 0.4s; }
+    @keyframes dotBounce {
+      0%, 80%, 100% { transform: translateY(0);    opacity: .5; }
+      40%            { transform: translateY(-6px); opacity: 1;  }
+    }
+
+    /* ── Quick chips ── */
+    .chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 6px 14px;
+      border-radius: 9999px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      cursor: pointer;
+      border: 1.5px solid;
+      transition: background 0.15s, color 0.15s, transform 0.1s;
+      white-space: nowrap;
+      touch-action: manipulation; /* prevent double-tap zoom on mobile */
+    }
+    .chip:active { transform: scale(0.96); }
+    .chip-confirm { border-color: #008751; color: #008751; background: #f0faf4; }
+    .chip-confirm:hover { background: #008751; color: #fff; }
+    .chip-change  { border-color: #d1d5db; color: #6b7280; background: #fff; }
+    .chip-change:hover { background: #f3f4f6; }
+
+    /* ── Chips container: hidden by default, flex when visible ── */
+    /* Use explicit display toggle in JS — avoids Tailwind hidden/flex conflict */
+    #chips { display: none; }
+    #chips.visible { display: flex; }
+
+    /* ── Success / failure bubble tint ── */
+    .bubble-success { border-left: 3px solid #008751; background: #f0faf4 !important; }
+    .bubble-failure { border-left: 3px solid #F59E0B; background: #fffbeb !important; }
+
+    /* ── Input ──
+       font-size 16px prevents iOS Safari auto-zoom when tapping the field */
+    #input { font-size: 16px; }
+    #input:focus { outline: none; box-shadow: 0 0 0 2.5px #2db86550; }
+
+    /* ── Send button: prevent double-tap zoom ── */
+    #send-btn { touch-action: manipulation; }
+
+    /* ── Hero gradient ── */
+    .hero-gradient {
+      background: linear-gradient(135deg, #008751 0%, #005233 100%);
+    }
+
+    /* ── Input bar: lift above iPhone home indicator ── */
+    #input-bar {
+      padding-bottom: calc(0.75rem + env(safe-area-inset-bottom, 0px));
+    }
+
+    /* ── Desktop: detach from edges, show as a card ── */
+    @media (min-width: 640px) {
+      html, body { display: flex; align-items: center; justify-content: center; }
+      #chat-window {
+        position: relative;
+        inset: auto;
+        height: 88vh;
+        max-height: 760px;
+        width: 100%;
+        max-width: 440px;
+        border-radius: 20px;
+        overflow: hidden;
+        box-shadow: 0 24px 64px -12px rgba(0,0,0,0.18), 0 0 0 1px rgba(0,135,81,0.08);
+      }
+      #input-bar { padding-bottom: 0.75rem; }
+    }
+  </style>
+</head>
+
+<body>
+  <div id="chat-window">
+
+    <!-- ── Hero / Header ── -->
+    <div class="hero-gradient px-4 pt-5 pb-4 flex-shrink-0">
+      <div class="flex items-center justify-between mb-3">
+        <!-- Logo -->
+        <div class="flex items-center gap-2.5">
+          <div class="w-9 h-9 rounded-xl bg-white/20 backdrop-blur flex items-center justify-center">
+            <span class="text-white font-bold text-base tracking-tight">CA</span>
+          </div>
+          <div>
+            <p class="text-white font-bold text-base leading-tight">Chop Airtime</p>
+            <p class="text-green-200 text-xs font-medium">AI-powered airtime top-up</p>
+          </div>
+        </div>
+        <!-- Badges -->
+        <div class="flex flex-col items-end gap-1">
+          <span class="text-xs bg-white/15 text-white px-2 py-0.5 rounded-full font-medium">🇳🇬 Nigeria</span>
+          <span class="text-xs bg-white/15 text-white px-2 py-0.5 rounded-full font-medium">✦ Free</span>
+        </div>
+      </div>
+
+      <!-- Tagline -->
+      <div class="bg-white/10 rounded-xl px-3 py-2.5 flex items-center gap-2.5">
+        <span class="text-xl">⚡</span>
+        <div>
+          <p class="text-white font-semibold text-sm">Send free airtime in seconds</p>
+          <p class="text-green-200 text-xs">MTN · Airtel · Glo · 9mobile — up to ₦500</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Messages ── -->
+    <div id="messages" class="px-3 py-4 space-y-4 bg-white flex-1"></div>
+
+    <!-- ── Typing indicator (hidden by default, shown via JS) ── -->
+    <div id="typing-row" class="px-3 pb-1 flex-shrink-0" style="display:none">
+      <div class="flex items-end gap-2">
+        <div class="w-7 h-7 rounded-full flex-shrink-0 flex items-center justify-center text-white text-xs font-bold"
+             style="background: linear-gradient(135deg,#2db865,#008751)">CA</div>
+        <div class="bg-white border border-gray-100 shadow-sm rounded-2xl rounded-bl-sm px-4 py-3 flex gap-1.5 items-center">
+          <span class="dot"></span>
+          <span class="dot"></span>
+          <span class="dot"></span>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Quick reply chips ── -->
+    <div id="chips" class="px-3 pb-2 gap-2 flex-wrap flex-shrink-0"></div>
+
+    <!-- ── Input bar ── -->
+    <div id="input-bar" class="bg-white border-t border-gray-100 px-3 pt-3 flex gap-2 items-center flex-shrink-0">
+      <input
+        id="input"
+        type="text"
+        placeholder="Type a message…"
+        autocomplete="off"
+        class="flex-1 bg-gray-50 border border-gray-200 rounded-2xl px-4 py-2.5 text-sm text-gray-800 placeholder-gray-400 transition"
+      />
+      <button
+        id="send-btn"
+        aria-label="Send"
+        class="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 transition active:scale-95"
+        style="background: linear-gradient(135deg,#2db865,#008751)"
+      >
+        <!-- Send arrow SVG -->
+        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5" />
+        </svg>
+      </button>
+    </div>
+
+  </div><!-- /#chat-window -->
+
+  <script src="assets/chat.js"></script>
+</body>
+</html>
