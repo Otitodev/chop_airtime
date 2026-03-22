@@ -11,7 +11,7 @@ function getApiBase() {
     return `${protocol}//${hostname}:${port}`;
   }
   // Production: point to Railway backend
-  return "https://your-app.up.railway.app"; // ← replace with your Railway URL after deploy
+  return "chopairtime.railway.internal"; // ← replace with your Railway URL after deploy
 }
 const API_BASE = getApiBase();
 
