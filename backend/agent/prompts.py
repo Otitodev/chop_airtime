@@ -85,8 +85,8 @@ SUCCESS_TEMPLATE = (
 FAILURE_TEMPLATE = (
     "Hmm, something no go well o. 😔\n\n"
     "I try to send ₦{amount} to {phone_number} but e no work this time. "
-    "Abeg try again later or reach out to support.\n\n"
-    "Sorry for the inconvenience!"
+    "The details don save — just type \"retry\" (or anything at all) and I go try again for you sharp sharp!\n\n"
+    "If e still no work, abeg reach out to support."
 )
 
 CAP_EXCEEDED_TEMPLATE = (
