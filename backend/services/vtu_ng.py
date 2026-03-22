@@ -47,14 +47,16 @@ async def disburse(
     }
 
     payload = {
-        "network": network_code,
+        "request_id": idempotency_key[:60],
+        "service_id": network_code,
         "phone": phone_number,
         "amount": int(amount),
-        "ref": idempotency_key[:60],
     }
 
-    url = f"{settings.vtu_ng_base_url}/airtime"
-    logger.info("VTU.ng request: network=%s phone=%s amount=%s", network_code, phone_number, amount)
+    # Base URL should be https://vtu.ng/wp-json — endpoint is /api/v2/airtime
+    base = settings.vtu_ng_base_url.rstrip("/")
+    url = f"{base}/api/v2/airtime"
+    logger.info("VTU.ng request: service_id=%s phone=%s amount=%s", network_code, phone_number, amount)
 
     async with httpx.AsyncClient(timeout=30.0) as client:
         resp = await client.post(url, json=payload, headers=headers)
@@ -62,11 +64,16 @@ async def disburse(
     raw = resp.json()
     logger.info("VTU.ng response: %s", raw)
 
-    # VTU.ng returns {"status": "success"} on success
-    status = raw.get("status", "")
-    reference = raw.get("ref", idempotency_key)
+    # VTU.ng returns {"code": "success", "data": {"order_id": ..., "status": "completed-api"}}
+    code = raw.get("code", "")
+    reference = str(raw.get("data", {}).get("order_id", idempotency_key))
 
-    if status == "success":
+    if code == "success":
+        return {"success": True, "reference": reference, "raw": raw}
+
+    # 409 duplicate_request_id means it already succeeded — treat as success
+    if resp.status_code == 409 and raw.get("code") == "duplicate_request_id":
+        logger.warning("VTU.ng duplicate request — treating as success")
         return {"success": True, "reference": reference, "raw": raw}
 
     return {"success": False, "reference": reference, "raw": raw}
