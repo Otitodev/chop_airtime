@@ -24,13 +24,15 @@ Greet → Collect phone & amount → Validate → Confirm → Disburse → Respo
 
 Only 2 of the 6 steps use an LLM. The rest are deterministic rules — keeping it fast, cheap, and predictable.
 
+If disbursement fails, the user is told immediately and prompted to retry. All collected details are preserved in the session — typing anything re-presents the confirmation summary so the user can retry with one tap.
+
 ---
 
 ## Business Rules
 
 | Rule | Value |
 |------|-------|
-| Lifetime cap per user | ₦500 |
+| Lifetime cap per user | ₦500 (keyed to recipient phone number across all sessions) |
 | Minimum top-up | ₦50 |
 | Maximum top-up | ₦500 |
 | Supported networks | MTN, Airtel, Glo, 9mobile |
@@ -300,9 +302,10 @@ Receives Evolution API webhook events. Validates HMAC-SHA256 signature before pr
 
 ## Common Issues
 
-**`Cannot connect to database`**
+**`Cannot connect to database` / `SSL connection closed unexpectedly`**
 - Check your `DATABASE_URL` is correct and includes `?sslmode=require`
 - Neon pauses inactive projects — open the Neon console to wake it up
+- If the error is transient (happens once then recovers), it's a stale connection pool entry — the app handles this automatically on the next request
 
 **`ResolutionImpossible` during pip install**
 - Make sure you're using Python 3.12: `py -3.12 -m venv .venv`
