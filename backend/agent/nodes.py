@@ -35,7 +35,7 @@ _TOOL_MAP = {t.name: t for t in _TOOLS}
 
 def _make_openai(settings):
     from langchain_openai import ChatOpenAI
-    return ChatOpenAI(model="gpt-4o", api_key=settings.openai_api_key, temperature=0.3)
+    return ChatOpenAI(model="gpt-4o-mini", api_key=settings.openai_api_key, temperature=0.3)
 
 
 def _make_mistral(settings):
@@ -56,15 +56,21 @@ def _make_anthropic(settings):
     )
 
 
+_llm_cache = None
+
+
 def _get_llm():
     """
     Return an LLM instance according to LLM_PROVIDER, with automatic fallback.
 
     Priority order based on LLM_PROVIDER setting:
-      "openai"    → GPT-4o → Mistral → Claude Sonnet 4.6
-      "mistral"   → Mistral → GPT-4o → Claude Sonnet 4.6
-      "anthropic" → Claude Sonnet 4.6 → GPT-4o → Mistral
+      "openai"    → GPT-4o-mini → Mistral → Claude Sonnet 4.6
+      "mistral"   → Mistral → GPT-4o-mini → Claude Sonnet 4.6
+      "anthropic" → Claude Sonnet 4.6 → GPT-4o-mini → Mistral
     """
+    global _llm_cache
+    if _llm_cache is not None:
+        return _llm_cache
     settings = get_settings()
     _factories = {
         "openai": _make_openai,
@@ -80,7 +86,8 @@ def _get_llm():
             llm = _factories[provider](settings)
             if provider != settings.llm_provider:
                 logger.warning("Primary LLM '%s' unavailable — using '%s'", settings.llm_provider, provider)
-            return llm
+            _llm_cache = llm
+            return _llm_cache
         except Exception as exc:
             logger.warning("LLM provider '%s' failed to initialise: %s", provider, exc)
 
@@ -191,7 +198,7 @@ def validate(state: AgentState) -> dict:
         msg = VALIDATION_ERROR_TEMPLATE.format(error=error_text)
         return {
             "messages": [AIMessage(content=msg)],
-            "next": "collect_slots",
+            "next": "END",
             "phone_number": None if not is_valid_nigerian_number(phone) else phone,
             "amount": None if amount < settings.min_topup or amount > settings.max_topup else amount,
         }
@@ -225,7 +232,7 @@ def validate(state: AgentState) -> dict:
         msg = VALIDATION_ERROR_TEMPLATE.format(error=error_text)
         return {
             "messages": [AIMessage(content=msg)],
-            "next": "collect_slots",
+            "next": "END",
             "amount": None,
             "user_id": user["id"],
             "user_total": user_total,

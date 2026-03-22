@@ -57,6 +57,7 @@ def build_graph():
             "confirm": "confirm",
             "collect_slots": "collect_slots",
             "respond": "respond",
+            "END": END,
         },
     )
 
