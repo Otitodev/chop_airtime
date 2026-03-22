@@ -31,16 +31,38 @@ def _get_pool() -> ThreadedConnectionPool:
 
 @contextmanager
 def _conn():
-    """Yield a psycopg2 connection from the pool, auto-commit or rollback."""
+    """Yield a psycopg2 connection from the pool, auto-commit or rollback.
+
+    Handles stale connections (closed by Supabase after idle timeout) by
+    discarding the dead connection and obtaining a fresh one once.
+    """
     pool = _get_pool()
     conn = pool.getconn()
+
+    # If the connection was dropped server-side (SSL closed unexpectedly),
+    # psycopg2 marks it as closed. Discard it and get a fresh one.
+    if conn.closed:
+        pool.putconn(conn, close=True)
+        conn = pool.getconn()
+
     try:
         yield conn
         conn.commit()
-    except Exception:
-        conn.rollback()
+    except (psycopg2.OperationalError, psycopg2.InterfaceError):
+        # Connection is broken — discard it so the pool doesn't reuse it.
+        try:
+            pool.putconn(conn, close=True)
+        except Exception:
+            pass
         raise
-    finally:
+    except Exception:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        pool.putconn(conn)
+        raise
+    else:
         pool.putconn(conn)
 
 

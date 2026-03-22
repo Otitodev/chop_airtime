@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from typing import Dict
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 from langchain_core.messages import HumanMessage, AIMessage
 
 from agent.graph import get_graph
@@ -31,12 +31,12 @@ def _get_last_ai_message(messages: list) -> str:
     return "No wahala, I dey here! How I fit help you?"
 
 
-def _blank_state(session_id: str) -> AgentState:
+def _blank_state(session_id: str, identifier: str) -> AgentState:
     return {
         "messages": [],
         "session_id": session_id,
         "channel": "web",
-        "identifier": session_id,
+        "identifier": identifier,
         "phone_number": None,
         "network": None,
         "amount": None,
@@ -51,15 +51,23 @@ def _blank_state(session_id: str) -> AgentState:
     }
 
 
+def _extract_ip(req: Request) -> str:
+    forwarded_for = req.headers.get("x-forwarded-for")
+    if forwarded_for:
+        return forwarded_for.split(",")[0].strip()
+    return req.client.host if req.client else "unknown"
+
+
 @router.post("/chat", response_model=ChatResponse)
-async def chat(request: ChatRequest):
+async def chat(request: ChatRequest, req: Request):
     session_id = request.session_id
+    client_ip = _extract_ip(req)
     graph = get_graph()
     prev = _sessions.get(session_id)
 
     # ── First ever call with no message → trigger greeting ──────────────────
     if prev is None and not request.message:
-        result = await graph.ainvoke(_blank_state(session_id))
+        result = await graph.ainvoke(_blank_state(session_id, client_ip))
         _sessions[session_id] = dict(result)
         reply = _get_last_ai_message(result["messages"])
         return ChatResponse(session_id=session_id, reply=reply)
@@ -67,7 +75,7 @@ async def chat(request: ChatRequest):
     # ── Returning call with a user message ───────────────────────────────────
     if prev is None:
         # Message arrived before greeting (e.g. direct API call) — start fresh
-        prev = _blank_state(session_id)
+        prev = _blank_state(session_id, client_ip)
 
     # Determine which node to resume at based on how far the conversation has progressed.
     # - All slots filled + validated (user_id set) → waiting at confirm
