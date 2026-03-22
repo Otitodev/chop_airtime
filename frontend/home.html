@@ -437,7 +437,7 @@
   <!-- ═══════════════════════════ SCRIPTS ═══════════════════════════ -->
   <script>
     // CTA link: local file → index.html, deployed → /chat
-    const chatUrl = location.protocol === "file:" ? "index.html" : "/chat";
+    const chatUrl = location.protocol === "file:" ? "chat.html" : "/chat";
     document.querySelectorAll(".cta-link").forEach(a => a.href = chatUrl);
 
     // Scroll reveal using IntersectionObserver

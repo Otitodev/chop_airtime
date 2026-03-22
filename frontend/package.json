@@ -2,7 +2,7 @@
   "name": "chop-airtime-frontend",
   "version": "1.0.0",
   "scripts": {
-    "start": "npx serve . --listen $PORT"
+    "start": "npx serve . --listen $PORT --config serve.json"
   },
   "dependencies": {
     "serve": "^14.2.3"
