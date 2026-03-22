@@ -25,7 +25,7 @@ from config import get_settings
 import database as db
 from services import vtu_dispatcher
 from services.notifier import send_low_balance_alert
-from utils.idempotency import generate_idempotency_key
+from utils.idempotency import generate_idempotency_key, generate_new_key
 
 logger = logging.getLogger(__name__)
 
@@ -312,7 +312,10 @@ async def execute(state: AgentState) -> dict:
     user_id = state["user_id"]
     session_id = state.get("session_id", "unknown")
 
-    idempotency_key = generate_idempotency_key(session_id, phone, amount)
+    # Reuse the stored key for retries (failed/pending tx); generate a fresh
+    # key for new requests. This allows the same phone+amount to be topped up
+    # multiple times across different transactions within the same session.
+    idempotency_key = state.get("idempotency_key") or generate_new_key(session_id, phone, amount)
 
     # Check for existing transaction with this key (idempotency guard)
     existing = db.get_transaction_by_idempotency_key(idempotency_key)
@@ -392,8 +395,18 @@ def respond(state: AgentState) -> dict:
             network=network,
             reference=reference,
         )
+        # Clear slots and idempotency state so the next user message starts
+        # fresh at collect_slots. user_id/user_total are kept so cap state
+        # doesn't require a redundant DB lookup on the next request.
         return {
             "messages": [AIMessage(content=msg)],
+            "phone_number": None,
+            "network": None,
+            "amount": None,
+            "confirmed": None,
+            "tx_id": None,
+            "idempotency_key": None,
+            "vtu_status": None,
             "next": "END",
         }
 
