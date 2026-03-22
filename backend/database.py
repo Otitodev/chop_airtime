@@ -29,19 +29,34 @@ def _get_pool() -> ThreadedConnectionPool:
     return _pool
 
 
+def _ping(conn) -> bool:
+    """Return True if the connection is alive, False if it has been dropped server-side.
+
+    conn.closed only reflects explicit closes; a server-side SSL drop leaves
+    conn.closed == 0 until the next query fails. A lightweight SELECT 1 detects
+    the broken connection before we hand it to a caller.
+    """
+    try:
+        conn.cursor().execute("SELECT 1")
+        conn.rollback()  # reset transaction state after the ping
+        return True
+    except (psycopg2.OperationalError, psycopg2.InterfaceError):
+        return False
+
+
 @contextmanager
 def _conn():
-    """Yield a psycopg2 connection from the pool, auto-commit or rollback.
+    """Yield a live psycopg2 connection from the pool, auto-commit or rollback.
 
-    Handles stale connections (closed by Supabase after idle timeout) by
-    discarding the dead connection and obtaining a fresh one once.
+    Neon (and Supabase) drop idle connections after a few minutes. The pool
+    holds references to those dead sockets, so we ping before yielding and
+    swap in a fresh connection if needed.
     """
     pool = _get_pool()
     conn = pool.getconn()
 
-    # If the connection was dropped server-side (SSL closed unexpectedly),
-    # psycopg2 marks it as closed. Discard it and get a fresh one.
-    if conn.closed:
+    if not _ping(conn):
+        logger.warning("Stale DB connection detected — replacing with a fresh one")
         pool.putconn(conn, close=True)
         conn = pool.getconn()
 
@@ -49,7 +64,6 @@ def _conn():
         yield conn
         conn.commit()
     except (psycopg2.OperationalError, psycopg2.InterfaceError):
-        # Connection is broken — discard it so the pool doesn't reuse it.
         try:
             pool.putconn(conn, close=True)
         except Exception:

@@ -51,24 +51,36 @@ Graph nodes execute in sequence: `greet → collect_slots → validate → confi
 
 1. **greet** — introduces the bot
 2. **collect_slots** — conversationally collects phone number + amount
-3. **validate** — checks 11-digit format, network prefix detection (auto-detects MTN/Airtel/Glo/9mobile), user cap check against Supabase
+3. **validate** — checks 11-digit format, network prefix detection (auto-detects MTN/Airtel/Glo/9mobile), user cap check against DB; **promotes `identifier` to the validated phone number** for both web and WhatsApp channels
 4. **confirm** — repeats details back to user for confirmation
-5. **execute** — calls VTU API with idempotency key, logs transaction to Supabase
-6. **respond** — success/failure/cap-exceeded message in Nigerian English with Pidgin flavour
+5. **execute** — calls VTU API with idempotency key, logs transaction to DB
+6. **respond** — success/failure/cap-exceeded message in Nigerian English with Pidgin flavour; on failure, clears `vtu_status` so the next user message retries via confirm without re-entering slots
 
-### Database Schema (Supabase PostgreSQL)
+### Failure & Retry Behaviour
+When a VTU disbursement fails:
+- All collected slots (`phone_number`, `network`, `amount`, `user_id`) are preserved in session state
+- `vtu_status` and `error_message` are cleared by `respond()`
+- The user is told their details are saved and to type anything to retry
+- The next message resumes at `confirm` (re-presents the summary); confirming re-runs `execute` with the same idempotency key (safe — no double charge)
+
+### User Identifier / Cap Tracking
+- **Web users**: `identifier` starts as `session_id` (set in `routes/chat.py`) but is promoted to the validated phone number in `validate()`. The lifetime cap is therefore keyed to the recipient phone number, not the browser session.
+- **WhatsApp users**: `identifier` is the sender's phone number from the first webhook — no promotion needed.
+- Both channels use `get_or_create_user(phone, channel)` for cap enforcement.
+
+### Database Schema (PostgreSQL / Neon)
 ```sql
 -- users: unique users and cumulative top-up totals
 users(id, identifier, channel, total_received, created_at, updated_at)
 
 -- transactions: every top-up attempt for audit
-transactions(id, user_id, phone_number, network, amount, status, vtu_reference, vtu_response JSONB, created_at)
+transactions(id, user_id, phone_number, network, amount, status, idempotency_key, vtu_reference, vtu_response JSONB, created_at)
 
 -- wallet_snapshots: periodic owner wallet balance snapshots
 wallet_snapshots(id, balance, snapshot_at)
 ```
 
-`identifier` is phone number for WhatsApp users, session ID for web users.
+`identifier` = validated phone number for all channels (promoted during `validate` for web users).
 
 ---
 
@@ -93,12 +105,15 @@ LOW_BALANCE_THRESHOLD=500
 
 ## Key Implementation Constraints
 
-- **Idempotency**: Use idempotency keys for all VTU API calls to prevent duplicate disbursements
+- **Idempotency**: Use idempotency keys for all VTU API calls to prevent duplicate disbursements. On failure, the same key is reused on retry — safe by design.
+- **VTU.ng request_id**: Must be ≤ 50 characters (`idempotency_key[:50]`). Longer values return `invalid_request_id`.
 - **Webhook security**: Always validate Evolution API HMAC signature before processing
 - **Prompt injection**: System prompt must be hardened; agent should refuse off-topic requests
-- **Fallback**: If VTpass fails, retry once then fall back to VTU.ng before returning an error
+- **Fallback order**: VTU.ng (primary, 2 attempts) → VTpass (secondary) → error
 - **Low-balance alert**: Trigger notification when wallet drops below ₦500
 - **Agent personality**: Nigerian English with Pidgin phrases ("No wahala", "Omo!", "Correct!", "I don send am")
+- **DB connection resilience**: `database._conn()` detects stale/closed connections (Neon drops idle connections) and discards them so the pool doesn't reuse dead connections
+- **Session store**: In-memory `_sessions` dict in `routes/chat.py` — lost on restart. Replace with Redis post-MVP.
 
 ---
 
