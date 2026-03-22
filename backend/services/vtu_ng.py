@@ -47,7 +47,7 @@ async def disburse(
     }
 
     payload = {
-        "request_id": idempotency_key[:60],
+        "request_id": idempotency_key[:50],
         "service_id": network_code,
         "phone": phone_number,
         "amount": int(amount),
