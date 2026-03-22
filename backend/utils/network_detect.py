@@ -21,7 +21,7 @@ _VTPASS_SERVICE_ID: dict[str, str] = {
     "MTN": "mtn",
     "Airtel": "airtel",
     "Glo": "glo",
-    "9mobile": "etisalat",
+    "9mobile": "9mobile",
 }
 
 
