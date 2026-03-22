@@ -16,7 +16,7 @@ class AgentState(TypedDict):
     # Session / user identity
     session_id: str
     channel: str          # "web" or "whatsapp"
-    identifier: str       # session_id for web; phone number for WhatsApp
+    identifier: str       # phone number for both channels (promoted from session_id after validate)
 
     # Slots collected during conversation
     phone_number: Optional[str]

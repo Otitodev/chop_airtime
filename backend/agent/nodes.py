@@ -206,10 +206,12 @@ def validate(state: AgentState) -> dict:
     # Detect network
     network = detect_network(phone)
 
-    # Ensure user record exists
-    identifier = state.get("identifier") or state.get("session_id", "unknown")
+    # Use the validated phone number as the canonical identifier for cap tracking.
+    # For WhatsApp, identifier is already the phone number; for web, this ties the
+    # lifetime cap to the recipient number rather than the ephemeral session_id,
+    # so the same number can't receive multiple top-ups across different sessions.
     channel = state.get("channel", "web")
-    user = db.get_or_create_user(identifier, channel)
+    user = db.get_or_create_user(phone, channel)
     user_total = float(user["total_received"])
     remaining = settings.user_lifetime_cap - user_total
 
@@ -220,6 +222,7 @@ def validate(state: AgentState) -> dict:
             "messages": [AIMessage(content=msg)],
             "next": "respond",
             "vtu_status": "cap_exceeded",
+            "identifier": phone,
             "user_id": user["id"],
             "user_total": user_total,
         }
@@ -234,12 +237,14 @@ def validate(state: AgentState) -> dict:
             "messages": [AIMessage(content=msg)],
             "next": "END",
             "amount": None,
+            "identifier": phone,
             "user_id": user["id"],
             "user_total": user_total,
         }
 
     return {
         "network": network,
+        "identifier": phone,
         "user_id": user["id"],
         "user_total": user_total,
         "next": "confirm",
@@ -380,7 +385,6 @@ def respond(state: AgentState) -> dict:
     amount = state.get("amount", 0)
 
     if vtu_status == "success":
-        # Find reference from last VTU call
         reference = state.get("idempotency_key", "N/A")[:12] + "..."
         msg = SUCCESS_TEMPLATE.format(
             amount=amount,
@@ -388,13 +392,25 @@ def respond(state: AgentState) -> dict:
             network=network,
             reference=reference,
         )
-    elif vtu_status == "cap_exceeded":
+        return {
+            "messages": [AIMessage(content=msg)],
+            "next": "END",
+        }
+
+    if vtu_status == "cap_exceeded":
         user_total = state.get("user_total", 500)
         msg = CAP_EXCEEDED_TEMPLATE.format(total_received=user_total)
-    else:
-        msg = FAILURE_TEMPLATE.format(amount=amount, phone_number=phone)
+        return {
+            "messages": [AIMessage(content=msg)],
+            "next": "END",
+        }
 
+    # Failure — clear vtu_status so the next user message resumes at confirm
+    # (chat.py sees slots still populated → resume_at="confirm") and retries cleanly.
+    msg = FAILURE_TEMPLATE.format(amount=amount, phone_number=phone)
     return {
         "messages": [AIMessage(content=msg)],
+        "vtu_status": None,
+        "error_message": None,
         "next": "END",
     }
